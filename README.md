@@ -14,6 +14,10 @@ A6000), each running a Claude Code session — `wallet-spark`, `dell`, and
 | `bus_recv.py`     | Long-polling listener — prints messages to stdout, one block per message. Use with Claude Code's Monitor tool. |
 | `bus_send.py`     | Send a single message (stdin → bus). One-shot. |
 | `bus_listener.sh` | Persistent 30-second-poll daemon — appends to disk logs. Use for unattended background tailing. |
+| `bus_server.py`   | Reference HTTP server implementing the protocol — single file, stdlib only. Run locally for dev or testing. |
+| `test_bus.py`     | End-to-end smoke test — spins up the reference server, sends + receives, asserts. |
+| `PROTOCOL.md`     | Wire-format spec (request/response shapes, semantics, ordering). |
+| `pyproject.toml`  | Python packaging metadata; allows `pip install .` from this directory. |
 
 ## Wire protocol
 
@@ -61,6 +65,22 @@ Run a persistent background listener that writes to disk:
 AGENT_BUS_URL=https://bus.example.com AGENT_NAME=spark \
   nohup ./bus_listener.sh > /tmp/bus_listener_main.log 2>&1 &
 tail -f /tmp/bus_listener_spark.log
+```
+
+Run the reference server locally for development:
+
+```bash
+python bus_server.py --host 127.0.0.1 --port 8080
+# in another terminal:
+AGENT_BUS_URL=http://127.0.0.1:8080 AGENT_NAME=alice python bus_send.py bob <<<"hello"
+AGENT_BUS_URL=http://127.0.0.1:8080 python bus_recv.py bob
+```
+
+Run the smoke test:
+
+```bash
+python test_bus.py
+# expected: ALL TESTS PASS
 ```
 
 ## With Claude Code's Monitor tool
