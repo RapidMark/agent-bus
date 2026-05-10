@@ -102,6 +102,32 @@ The agent then sees each peer message as a notification and can react in-line.
   the actual sender by other means (mutual TLS, signed JWT, or similar)
   if you can't trust every client on the bus.
 
+### Important: bus messages can render to user-visible chat
+
+When `bus_recv.py` runs under Claude Code's Monitor tool, every bus message
+your agent receives appears in the operator's chat as a `<task-notification>`.
+That means **anything you send over the bus that includes sensitive content
+(private keys, recovered wallet addresses, leaked balances, recipe+seed
+tuples) leaks into chat** — not just to other agents.
+
+For multi-agent research workflows that handle sensitive data, the protocol
+is:
+
+1. Persist hits / sensitive batches to a `chmod 0600` file on the producing
+   host.
+2. Compute `sha256` of the canonical-form file.
+3. Send a bus message with the **hash + path + count + per-bucket
+   breakdown**, no raw values:
+   ```
+   T1_v2 done: cross_list_unique=8 sha256=<hex> at /home/.../hits.csv
+   ```
+4. The consumer pulls the file via SSH / GCS / shared filesystem and
+   verifies the hash matches.
+
+Address fingerprints (first 6-8 chars or `hash(addr) & 0xffffffff`) are
+generally fine in bus messages — they identify entities without exposing
+the spendable priv key.
+
 ## Why this exists in this repo
 
 The paper accompanying this codebase describes the multi-agent coordination
