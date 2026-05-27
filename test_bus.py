@@ -68,9 +68,10 @@ def main() -> int:
         assert len(r3["messages"]) == 5
         print(f"[4] batch of 5 received")
 
-        # 5. /inbox shows counts
+        # 5. /inbox shows counts (nested: { channel: { recipient: count } })
         r4 = http("GET", f"{base}/inbox")
-        assert "bob" in r4["recipients"]
+        assert "default" in r4["recipients"], f"expected 'default' channel, got {r4['recipients']}"
+        assert "bob" in r4["recipients"]["default"]
         print(f"[5] /inbox: {r4['recipients']}")
 
         # 6. Bad request rejected
@@ -81,6 +82,38 @@ def main() -> int:
             print(f"[6] /send rejects malformed body with 400")
         else:
             print("expected 400, got success"); return 1
+
+        # 7. Channel isolation: bob on channel "servers" should NOT see
+        #    messages sent on the default channel
+        before = http("GET", f"{base}/recv?to=bob&since=0&channel=servers")
+        assert len(before["messages"]) == 0, f"channel servers should be empty, got {before}"
+        print(f"[7] /recv on a different channel is isolated (no leakage from default)")
+
+        # 8. Channel-scoped send + recv round-trip
+        http("POST", f"{base}/send",
+             body={"channel": "servers", "from": "frontend", "to": "backend", "msg": "ping"})
+        r8 = http("GET", f"{base}/recv?to=backend&since=0&channel=servers")
+        assert len(r8["messages"]) == 1 and r8["messages"][0]["msg"] == "ping"
+        # And the same agent name on default must remain empty (no cross-channel reads)
+        r8b = http("GET", f"{base}/recv?to=backend&since=0")
+        assert len(r8b["messages"]) == 0, "default channel should not see 'servers' traffic"
+        print(f"[8] channel-scoped send+recv round-trip, no cross-channel leakage")
+
+        # 9. /inbox surfaces both channels independently
+        r9 = http("GET", f"{base}/inbox")
+        assert "default" in r9["recipients"] and "servers" in r9["recipients"]
+        assert r9["recipients"]["servers"].get("backend") == 1
+        print(f"[9] /inbox lists both channels: {sorted(r9['recipients'].keys())}")
+
+        # 10. Same agent name on two channels — totally separate queues
+        http("POST", f"{base}/send", body={"from": "x", "to": "twin", "msg": "default-side"})
+        http("POST", f"{base}/send",
+             body={"channel": "servers", "from": "x", "to": "twin", "msg": "servers-side"})
+        rA = http("GET", f"{base}/recv?to=twin&since=0")
+        rB = http("GET", f"{base}/recv?to=twin&since=0&channel=servers")
+        assert len(rA["messages"]) == 1 and rA["messages"][0]["msg"] == "default-side"
+        assert len(rB["messages"]) == 1 and rB["messages"][0]["msg"] == "servers-side"
+        print(f"[10] same agent name on two channels stays isolated")
 
         print("\nALL TESTS PASS")
         return 0

@@ -8,9 +8,11 @@
 #   $HEARTBEAT — ISO timestamp updated every poll (use to detect liveness)
 #
 # Configuration (env vars or defaults):
-#   AGENT_BUS_URL  base URL of the bus (required)
-#   AGENT_NAME     this agent's name (required, used as ?to=$AGENT_NAME)
-#   AGENT_BUS_UA   User-Agent header (default: Mozilla/5.0)
+#   AGENT_BUS_URL      base URL of the bus (required)
+#   AGENT_NAME         this agent's name (required, used as ?to=$AGENT_NAME)
+#   AGENT_BUS_UA       User-Agent header (default: Mozilla/5.0)
+#   AGENT_BUS_CHANNEL  channel for traffic isolation (default: "default").
+#                      Only messages sent on the same channel are received.
 #   LOG, FULL, HEARTBEAT, PID_FILE — output paths (defaults under /tmp)
 #
 # Start:  AGENT_BUS_URL=... AGENT_NAME=spark nohup ./bus_listener.sh \
@@ -28,7 +30,8 @@ set -u
 : "${AGENT_BUS_URL:?AGENT_BUS_URL env var required}"
 : "${AGENT_NAME:?AGENT_NAME env var required}"
 UA="${AGENT_BUS_UA:-Mozilla/5.0}"
-URL="${AGENT_BUS_URL%/}/recv?to=${AGENT_NAME}&max=50"
+CHANNEL="${AGENT_BUS_CHANNEL:-default}"
+URL="${AGENT_BUS_URL%/}/recv?to=${AGENT_NAME}&channel=${CHANNEL}&max=50"
 LOG="${LOG:-/tmp/bus_listener_${AGENT_NAME}.log}"
 FULL="${FULL:-/tmp/bus_listener_${AGENT_NAME}_full.jsonl}"
 HEARTBEAT="${HEARTBEAT:-/tmp/bus_listener_${AGENT_NAME}_heartbeat}"

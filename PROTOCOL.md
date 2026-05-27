@@ -17,23 +17,30 @@ POST /send HTTP/1.1
 Content-Type: application/json
 
 {
-  "from": "spark",
-  "to":   "dell",
-  "msg":  "T1 verify done — 4/4 hits are honeypots."
+  "channel": "default",
+  "from":    "spark",
+  "to":      "dell",
+  "msg":     "T1 verify done — 4/4 hits are honeypots."
 }
 ```
 
 Response (200 OK):
 ```json
-{ "ok": true, "ts": 1778431629.594 }
+{ "ok": true, "ts": 1778431629.594, "channel": "default" }
 ```
 
 `ts` is the server's clock at the moment the message was accepted; clients use
 this as the cursor reference if they want to know "when was this delivered."
 
-### `GET /recv?to=<name>&since=<seconds>&block=<bool>`
+The `channel` field (optional, default `"default"`) isolates traffic on the
+same bus — two messages with the same `to` but different `channel` values are
+delivered to different receivers. Servers that pre-date this field MUST treat
+its absence as `"default"`, which keeps every legacy client routing correctly.
 
-Long-poll for messages addressed to `<name>` with `ts > <since>`.
+### `GET /recv?to=<name>&since=<seconds>&block=<bool>&channel=<channel>`
+
+Long-poll for messages addressed to `<name>` with `ts > <since>` on the
+specified channel.
 
 Query parameters:
 - `to` (required) — agent name to receive for.
@@ -44,6 +51,9 @@ Query parameters:
   request open up to ~30 s waiting for new messages, then returns whatever
   has accumulated. If `false`, returns immediately with whatever's queued.
 - `max` (optional) — soft cap on the number of messages returned per call.
+- `channel` (optional, default `"default"`) — only messages posted to this
+  channel are returned. Use to keep unrelated agent conversations on the same
+  bus from cross-contaminating.
 
 Response (200 OK):
 ```json
@@ -60,11 +70,22 @@ Response (200 OK):
 `since` cursor to `max(max(messages.ts), now)` so they don't re-receive
 their own batch.
 
-### `GET /inbox?to=<name>` (optional)
+### `GET /inbox` (optional)
 
-Returns a count of pending unread messages per recipient (no message
-contents). Useful for status dashboards. Optional — not all server
-implementations support this.
+Returns counts of pending unread messages, nested by channel then recipient
+(no message contents). Useful for status dashboards. Optional — not all
+server implementations support this.
+
+Response (200 OK):
+```json
+{
+  "recipients": {
+    "default":    { "dell": 3, "cube": 1 },
+    "cloudhands": { "backend": 7 }
+  },
+  "now": 1778431659.7
+}
+```
 
 ## Semantics
 

@@ -2,15 +2,21 @@
 """Send a message to another agent on the HTTP message bus.
 
 Configuration (env vars):
-  AGENT_BUS_URL    base URL of the bus (required)
-  AGENT_BUS_UA     User-Agent header (default: "Mozilla/5.0")
-  AGENT_NAME       this agent's name as appears in the `from` field
-                   (default: "agent")
+  AGENT_BUS_URL      base URL of the bus (required)
+  AGENT_BUS_UA       User-Agent header (default: "Mozilla/5.0")
+  AGENT_NAME         this agent's name as appears in the `from` field
+                     (default: "agent")
+  AGENT_BUS_CHANNEL  channel for traffic isolation (default: "default").
+                     Different channels can reuse the same agent names without
+                     crossing streams. Backward-compatible — servers that
+                     ignore the channel field still route correctly when
+                     everyone sticks to "default".
 
 Usage:
   echo "hello dell" | AGENT_BUS_URL=... AGENT_NAME=spark bus_send.py dell
 
-  AGENT_BUS_URL=... AGENT_NAME=spark bus_send.py dell <<'MSG'
+  AGENT_BUS_URL=... AGENT_NAME=ch-api AGENT_BUS_CHANNEL=cloudhands \\
+      bus_send.py ch-monitor <<'MSG'
   multi-line
   message
   MSG
@@ -30,10 +36,11 @@ def main(to: str) -> None:
         sys.exit(2)
     ua = os.environ.get("AGENT_BUS_UA", "Mozilla/5.0")
     sender = os.environ.get("AGENT_NAME", "agent")
+    channel = os.environ.get("AGENT_BUS_CHANNEL", "default")
     send_url = f"{url_base.rstrip('/')}/send"
 
     body = sys.stdin.read()
-    payload = {"from": sender, "to": to, "msg": body}
+    payload = {"channel": channel, "from": sender, "to": to, "msg": body}
     req = urllib.request.Request(
         send_url,
         method="POST",

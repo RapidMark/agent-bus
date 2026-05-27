@@ -30,28 +30,44 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 
+DEFAULT_CHANNEL = "default"
+
+
 class BusState:
     def __init__(self, max_queue: int = 1000) -> None:
         self.lock = threading.RLock()
-        self.queues: dict[str, deque] = defaultdict(lambda: deque(maxlen=max_queue))
+        self.max_queue = max_queue
+        # Keyed by (channel, recipient) so traffic on different channels can't
+        # collide even when two channels happen to use the same agent name.
+        # Backward-compatible: omitting `channel` on the client side routes to
+        # `DEFAULT_CHANNEL`, so existing deployments keep working unchanged.
+        self.queues: dict[tuple[str, str], deque] = defaultdict(
+            lambda: deque(maxlen=max_queue)
+        )
 
-    def push(self, sender: str, recipient: str, body: str) -> float:
+    def push(self, channel: str, sender: str, recipient: str, body: str) -> float:
         ts = time.time()
         msg = {"ts": ts, "from": sender, "msg": body}
         with self.lock:
-            self.queues[recipient].append(msg)
+            self.queues[(channel, recipient)].append(msg)
         return ts
 
-    def fetch(self, recipient: str, since: float, max_count: int = 100) -> list:
+    def fetch(self, channel: str, recipient: str, since: float, max_count: int = 100) -> list:
         with self.lock:
-            q = self.queues.get(recipient)
+            q = self.queues.get((channel, recipient))
             if not q:
                 return []
             return [m for m in q if m["ts"] > since][:max_count]
 
     def inbox_counts(self) -> dict:
+        # Nested: { channel: { recipient: count } }
         with self.lock:
-            return {r: len(q) for r, q in self.queues.items() if q}
+            out: dict[str, dict[str, int]] = {}
+            for (channel, recipient), q in self.queues.items():
+                if not q:
+                    continue
+                out.setdefault(channel, {})[recipient] = len(q)
+            return out
 
 
 STATE: BusState  # set in main
@@ -77,12 +93,13 @@ class Handler(BaseHTTPRequestHandler):
             if not recipient:
                 self._json(400, {"error": "to= required"})
                 return
+            channel = q.get("channel", DEFAULT_CHANNEL)
             since = float(q.get("since", "0"))
             block = q.get("block", "false").lower() == "true"
             max_count = int(q.get("max", "100"))
             deadline = time.time() + 30.0
             while True:
-                msgs = STATE.fetch(recipient, since, max_count)
+                msgs = STATE.fetch(channel, recipient, since, max_count)
                 if msgs or not block or time.time() >= deadline:
                     self._json(200, {"messages": msgs, "now": time.time()})
                     return
@@ -111,11 +128,12 @@ class Handler(BaseHTTPRequestHandler):
         sender = body.get("from")
         recipient = body.get("to")
         msg = body.get("msg")
+        channel = body.get("channel", DEFAULT_CHANNEL)
         if not (sender and recipient and isinstance(msg, str)):
             self._json(400, {"error": "from, to, msg required"})
             return
-        ts = STATE.push(sender, recipient, msg)
-        self._json(200, {"ok": True, "ts": ts})
+        ts = STATE.push(channel, sender, recipient, msg)
+        self._json(200, {"ok": True, "ts": ts, "channel": channel})
 
 
 def main() -> None:

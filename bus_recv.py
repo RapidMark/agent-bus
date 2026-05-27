@@ -7,13 +7,17 @@ Monitor tool (each printed block becomes a notification) or as a standalone
 daemon piped to a log file.
 
 Configuration (env vars):
-  AGENT_BUS_URL    base URL of the bus (default: $AGENT_BUS_URL or "set me")
-  AGENT_BUS_UA     User-Agent header (default: "Mozilla/5.0" — many bus
-                   deployments sit behind a WAF that rejects script UAs;
-                   the Mozilla string keeps long-poll requests open)
+  AGENT_BUS_URL      base URL of the bus (default: $AGENT_BUS_URL or "set me")
+  AGENT_BUS_UA       User-Agent header (default: "Mozilla/5.0" — many bus
+                     deployments sit behind a WAF that rejects script UAs;
+                     the Mozilla string keeps long-poll requests open)
+  AGENT_BUS_CHANNEL  channel for traffic isolation (default: "default"). Only
+                     messages sent on the same channel are received. Lets the
+                     same bus carry multiple isolated agent-conversations.
 
 Usage:
   AGENT_BUS_URL=https://your-bus.example.com python bus_recv.py my-agent-name
+  AGENT_BUS_CHANNEL=cloudhands AGENT_BUS_URL=... python bus_recv.py ch-claude-1
 
 Protocol (works against any bus implementing /recv?to=&since=&block=true):
   GET {AGENT_BUS_URL}/recv?to={name}&since={float_seconds}&block=true
@@ -42,13 +46,14 @@ def main(name: str) -> None:
         print("AGENT_BUS_URL env var required", file=sys.stderr)
         sys.exit(2)
     ua = os.environ.get("AGENT_BUS_UA", "Mozilla/5.0")
+    channel = os.environ.get("AGENT_BUS_CHANNEL", "default")
     recv_url = f"{url_base.rstrip('/')}/recv"
 
     since = time.time()
     while True:
         try:
             req = urllib.request.Request(
-                f"{recv_url}?to={name}&since={since}&block=true",
+                f"{recv_url}?to={name}&since={since}&block=true&channel={channel}",
                 headers={"User-Agent": ua},
             )
             with urllib.request.urlopen(req, timeout=35) as r:
