@@ -40,6 +40,19 @@ import urllib.error
 import urllib.request
 
 
+# Windows consoles default to cp1252, which raises UnicodeEncodeError on any
+# non-Latin-1 character in a message body (em-dashes, arrows, emoji, CJK, …).
+# Without this the listener crash-loops on the first such message because the
+# `since` cursor never advances past the offending /recv batch. errors=replace
+# is a deliberate downgrade: a single message with weird bytes still prints
+# (with replacement chars) instead of taking the whole listener down.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass
+
+
 def main(name: str) -> None:
     url_base = os.environ.get("AGENT_BUS_URL")
     if not url_base:
