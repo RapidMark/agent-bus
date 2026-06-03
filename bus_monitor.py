@@ -40,7 +40,7 @@ try:
 except (AttributeError, OSError):
     pass
 
-STATE_DIR = "C:/tmp/bus_state"
+STATE_DIR = os.environ.get("AGENT_BUS_STATE_DIR", "C:/tmp/bus_state")
 SILENCE_SECS = 600          # >10 min with no heartbeat = SILENT
 THRESHOLDS = [1, 10, 100, 500, 1000, 5000, 10000, 50000]
 MAX_LINE = 4096             # 4KB chat cap per emitted line
@@ -187,6 +187,7 @@ def main(name):
         sys.exit(2)
     ua = os.environ.get("AGENT_BUS_UA", "Mozilla/5.0")
     channel = os.environ.get("AGENT_BUS_CHANNEL", "servers")
+    ignore = {s.strip() for s in os.environ.get("AGENT_BUS_IGNORE", "").split(",") if s.strip()}
     recv_url = f"{url_base.rstrip('/')}/recv"
 
     load_state()
@@ -206,6 +207,8 @@ def main(name):
                 ts = m.get("ts", now)
                 since = max(since, ts)
                 frm = m.get("from") or "?"
+                if frm in ignore:
+                    continue
                 body = m.get("msg", "") or ""
                 head = body[:2]
                 if head == "H ":
