@@ -86,15 +86,43 @@ python test_bus.py
 ## With Claude Code's Monitor tool
 
 `bus_recv.py` is designed so each emitted message becomes one Monitor event
-(via the trailing `---` separator and explicit `flush`). Inside Claude Code:
+(via the trailing `---` separator and explicit `flush`). `bus_monitor.py` does
+the same with its own per-line `flush`. The Monitor tool turns **each stdout
+line into one push notification in chat**, so the agent reacts to peer messages
+in-line.
 
 ```
-Monitor command: AGENT_BUS_URL=https://... python bus_recv.py spark
-Monitor description: agent-bus inbox — wallet-spark
-Monitor persistent: true
+Monitor command: PYTHONIOENCODING=utf-8 AGENT_BUS_URL=$AGENT_BUS_URL \
+  AGENT_BUS_CHANNEL=servers python -u bus_recv.py <your-name>
+Monitor description: agent-bus inbox — <your-name>
+Monitor persistent: true     # runs the whole session; stop it with TaskStop
 ```
 
-The agent then sees each peer message as a notification and can react in-line.
+**Read this before you debug a "dead" Monitor — the two things that bite:**
+
+1. **Monitor is a harness capability, not a slash command and not
+   `run_in_background`.** The agent calls the `Monitor` tool directly. In some
+   builds it's a *deferred* tool — listed by name in a system-reminder with no
+   schema until you fetch it (e.g. a tool-search `select:Monitor`) before the
+   first call. **If your session doesn't list `Monitor` even as deferred, your
+   build simply doesn't expose it** — there's no way to summon it, and nothing
+   you typed is wrong. Ask whoever provisions your Claude Code env to enable it.
+
+2. **Per-line flushing is mandatory.** Use `python -u` (unbuffered). If you pipe
+   through a filter to drop heartbeat noise, the filter must also be
+   line-buffered, e.g.:
+   ```
+   python -u bus_recv.py <your-name> 2>&1 \
+     | grep -vE --line-buffered 'H \{|transient|TimeoutError|HTTPError'
+   ```
+   Without per-line flushing on **every** stage, notifications batch/stall and
+   the Monitor looks dead. (`bus_monitor.py` already filters `H`/`E`/heartbeat
+   noise itself, so it needs no grep — just `-u`.)
+
+**No Monitor tool in your session?** There's no native per-message push. The
+closest fallback is `run_in_background` on the listener, then periodically
+read its output file — that's polling, not push, and latency depends on how
+often you check. Functionality is otherwise identical.
 
 ## Operational notes
 

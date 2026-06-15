@@ -18,8 +18,8 @@ This script resumes from the existing state files so restarts don't re-alert on
 history or lose accumulated counts.
 
 Run under Monitor:
-  PYTHONIOENCODING=utf-8 AGENT_BUS_URL=https://api.cloudhands.dev/agent-bus \
-    AGENT_BUS_CHANNEL=servers python bus_monitor.py backend
+  PYTHONIOENCODING=utf-8 AGENT_BUS_URL=https://your-bus.example.com \
+    AGENT_BUS_CHANNEL=servers python -u bus_monitor.py backend
 
 Heartbeat/event envelope (from the prod tailer daemon, see Backend tailer.py):
   H {"server","ts","version","uptime_s","err_24h","spool"}
