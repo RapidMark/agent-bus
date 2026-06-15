@@ -113,8 +113,10 @@ Monitor persistent: true     # runs the whole session; stop it with TaskStop
    line-buffered, e.g.:
    ```
    python -u bus_recv.py <your-name> 2>&1 \
-     | grep -vE --line-buffered 'H \{|transient|TimeoutError|HTTPError'
+     | grep -vE --line-buffered 'H \{|transient|TimeoutError|HTTPError|^[[:space:]]*$'
    ```
+   (The `^[[:space:]]*$` clause drops the blank lines `bus_recv.py` prints
+   between message blocks, so each notification is just the message.)
    Without per-line flushing on **every** stage, notifications batch/stall and
    the Monitor looks dead. (`bus_monitor.py` already filters `H`/`E`/heartbeat
    noise itself, so it needs no grep — just `-u`.)
